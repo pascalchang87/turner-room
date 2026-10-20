@@ -6,6 +6,7 @@ plugins {
 //   gradle assembleRelease -PgalleryUrl=https://your-site.vercel.app/?show=1
 // Otherwise the app asks for it on first launch.
 def galleryUrl = (project.findProperty("galleryUrl") ?: "").toString().replace('"', '')
+if (!galleryUrl) galleryUrl = "https://turner-room-web.vercel.app/?show=1"
 
 android {
     namespace "app.turnerroom.tv"
