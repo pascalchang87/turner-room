@@ -156,6 +156,7 @@ button { cursor: pointer; }
 .seg button + button { border-left: 1px solid var(--line); }
 .seg button[aria-pressed="true"] { background: var(--panel-2); color: var(--ink); }
 .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; box-shadow: inset 0 0 0 1px rgba(0,0,0,.4); }
+.swatch[style*="transparent"] { box-shadow: inset 0 0 0 1px var(--ink-dim); background: linear-gradient(135deg, transparent 45%, var(--ink-dim) 45% 55%, transparent 55%) !important; }
 .field { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-dim); font-size: 13px; }
 .field input[type=range] { width: 120px; accent-color: var(--brass); }
 .check { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-dim); font-size: 13px; }
@@ -243,6 +244,7 @@ button { cursor: pointer; }
   </div>
   <div class="ins-row">
     <label class="field" for="sizeRange">Size <input type="range" id="sizeRange" min="40" max="900" step="2"></label>
+    <label class="field" for="fscaleRange">Frame width <input type="range" id="fscaleRange" min="0.3" max="2.5" step="0.05"></label>
     <label class="field" for="matRange">Mat <input type="range" id="matRange" min="0" max="0.3" step="0.01"></label>
     <label class="check" for="labelCheck"><input type="checkbox" id="labelCheck"> Wall label</label>
     <span style="flex:1"></span>
@@ -380,7 +382,8 @@ const FRAMES = {
   ebony: { name: "Ebony", swatch: "#1f1c19", width: 0.05, layers: [
     { f: .30, c: "#1b1815", d: 1, cls: "tex" },
     { f: .50, c: "#24201c", d: 1 },
-    { f: .20, c: "#0c0b0a", d: -1 } ] }
+    { f: .20, c: "#0c0b0a", d: -1 } ] },
+  none: { name: "None", swatch: "transparent", width: 0, layers: [] }
 };
 
 const SOURCES = {
@@ -460,7 +463,7 @@ function normalise(g) {
       id: p.id || uid(), src: p.src, thumb: p.thumb || p.src, q: p.q || "", title: p.title || "Untitled",
       artist: p.artist || "", date: p.date || "", credit: p.credit || "", ar: +p.ar || 1.33,
       w: clamp(+p.w || 240, 30, 960), x: clamp(+p.x || W / 2, 0, W), y: clamp(+p.y || H / 2, 0, H),
-      frame: FRAMES[p.frame] ? p.frame : "gilt", mat: clamp(+p.mat || 0, 0, 0.3), label: p.label !== false
+      frame: FRAMES[p.frame] ? p.frame : "gilt", mat: clamp(+p.mat || 0, 0, 0.3), fscale: clamp(+p.fscale || 1, 0.3, 2.5), label: p.label !== false
     }))
   }));
   if (!g.walls.length) g.walls.push({ id: uid(), name: "Wall 1", pieces: [] });
@@ -474,7 +477,7 @@ function dims(p) {
   const iw = p.w, ih = p.w / p.ar;
   const base = (iw + ih) / 2;
   const prof = FRAMES[p.frame] || FRAMES.gilt;
-  const fw = clamp(base * prof.width, 4, 60);
+  const fw = prof.width ? clamp(base * prof.width * (p.fscale || 1), 2, 110) : 0;
   const mw = base * p.mat;
   return { iw, ih, fw, mw, ow: iw + 2 * (fw + mw), oh: ih + 2 * (fw + mw), prof };
 }
@@ -530,7 +533,7 @@ function pieceHTML(p) {
   const glaze = gallery.settings.lamps
     ? "linear-gradient(to bottom, rgba(255,226,170,.18), rgba(255,226,170,.04) 40%, rgba(0,0,0,.12))"
     : "linear-gradient(to bottom, rgba(255,250,235,.04), transparent 35%, rgba(0,0,0,.10))";
-  const frameShadow = `inset 0 ${S(d.fw * .10)} ${S(d.fw * .22)} rgba(0,0,0,.6), inset 0 0 ${S(d.fw * .06)} rgba(0,0,0,.7)`;
+  const frameShadow = d.fw ? `inset 0 ${S(d.fw * .10)} ${S(d.fw * .22)} rgba(0,0,0,.6), inset 0 0 ${S(d.fw * .06)} rgba(0,0,0,.7)` : "none";
   const sight = `<div class="sight" style="width:${S(d.iw)};height:${S(d.ih)};${p.mat ? `box-shadow:0 0 0 ${S(Math.max(.6, d.mw * .03))} #f6f1e4` : ""}">
       <img src="${esc(p.src)}" alt="${esc(p.title)}" loading="eager" decoding="async" referrerpolicy="no-referrer" draggable="false">
       <i class="glaze" style="background:${glaze};${p.mat ? "" : `box-shadow:${frameShadow}`}"></i></div>`;
@@ -654,7 +657,7 @@ function renderTabs() {
 /* ============================================================
    Inspector
    ============================================================ */
-const ins = { box: $("#inspector"), title: $("#insTitle"), seg: $("#frameSeg"), size: $("#sizeRange"), mat: $("#matRange"), label: $("#labelCheck") };
+const ins = { fscale: $("#fscaleRange"), box: $("#inspector"), title: $("#insTitle"), seg: $("#frameSeg"), size: $("#sizeRange"), mat: $("#matRange"), label: $("#labelCheck") };
 ins.seg.innerHTML = Object.entries(FRAMES).map(([k, f]) =>
   `<button data-frame="${k}" aria-pressed="false"><span class="swatch" style="background:${f.swatch}"></span>${f.name}</button>`).join("");
 
@@ -665,6 +668,8 @@ function renderInspector() {
   ins.title.innerHTML = `${esc(p.title)}<span>${esc(p.artist)}${p.date ? ", " + esc(p.date) : ""}</span>`;
   ins.seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.frame === p.frame)));
   ins.size.value = p.w; ins.mat.value = p.mat; ins.label.checked = p.label;
+  ins.fscale.value = p.fscale || 1; ins.fscale.disabled = p.frame === "none";
+  ins.fscale.closest(".field").style.opacity = p.frame === "none" ? .4 : 1;
 }
 ins.seg.addEventListener("click", (e) => {
   const b = e.target.closest("button[data-frame]"); const p = findPiece(selectedId);
@@ -672,6 +677,7 @@ ins.seg.addEventListener("click", (e) => {
   p.frame = b.dataset.frame; render(); scheduleSave();
 });
 ins.size.addEventListener("input", () => { const p = findPiece(selectedId); if (!p) return; p.w = +ins.size.value; render(); scheduleSave(); });
+ins.fscale.addEventListener("input", () => { const p = findPiece(selectedId); if (!p) return; p.fscale = +ins.fscale.value; render(); scheduleSave(); });
 ins.mat.addEventListener("input", () => { const p = findPiece(selectedId); if (!p) return; p.mat = +ins.mat.value; render(); scheduleSave(); });
 ins.label.addEventListener("change", () => { const p = findPiece(selectedId); if (!p) return; p.label = ins.label.checked; render(); scheduleSave(); });
 $("#btnFront").addEventListener("click", () => {
