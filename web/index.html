@@ -443,6 +443,8 @@ function uid() { return Math.random().toString(36).slice(2, 10); }
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function curWall() { return gallery.walls[wallIndex]; }
+let shownWallId = null;
+function curWallSafe() { return shownWallId ? { id: shownWallId } : null; }
 function findPiece(id) { return curWall().pieces.find((p) => p.id === id); }
 function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
@@ -567,6 +569,7 @@ function pieceHTML(p) {
 }
 
 function renderWallInto(layer, wall) {
+  if (mode === "show") shownWallId = wall.id;
   if (!wall.pieces.length) {
     layer.innerHTML = mode === "edit"
       ? `<div class="empty-wall">An empty wall. Use “Add painting” to hang the first work.</div>` : "";
@@ -748,7 +751,7 @@ el.tabs.addEventListener("click", (e) => {
     gallery.walls.push({ id: uid(), name: `Wall ${gallery.walls.length + 1}`, pieces: [] });
     wallIndex = gallery.walls.length - 1; selectedId = null; render(); scheduleSave(); return;
   }
-  wallIndex = +b.dataset.wall; selectedId = null; render();
+  wallIndex = +b.dataset.wall; selectedId = null; render(); scheduleSave(); // the projector follows the open wall
 });
 $("#btnHang").addEventListener("click", () => { hangEvenly(curWall()); render(); scheduleSave(); toast("Rehung on a common centre line"); });
 $("#btnShow").addEventListener("click", () => enterShow());
@@ -782,7 +785,10 @@ function startRotation() {
 function stopRotation() { clearInterval(rotateTimer); rotateTimer = 0; }
 function goWall(step) {
   const n = gallery.walls.length; if (n < 2) return;
-  wallIndex = (wallIndex + step + n) % n;
+  fadeToWall((wallIndex + step + n) % n);
+}
+function fadeToWall(i) {
+  wallIndex = i;
   renderWallInto(back, curWall());
   back.style.opacity = 1; front.style.opacity = 0;
   [front, back] = [back, front];
@@ -996,6 +1002,7 @@ function toast(msg) {
    ============================================================ */
 function setStatus(text, warn) { el.status.textContent = text; el.status.classList.toggle("warn", !!warn); }
 function scheduleSave() {
+  if (mode === "edit" && gallery.walls[wallIndex]) gallery.settings.currentWall = gallery.walls[wallIndex].id;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
     lsSet(LS_KEY, JSON.stringify(gallery));
@@ -1043,9 +1050,13 @@ async function checkCloud() {
     if (j.gallery && txt !== lastCloudJson) {
       lastCloudJson = txt;
       gallery = normalise(j.gallery);
-      wallIndex = Math.min(wallIndex, gallery.walls.length - 1);
       applyBrightness();
-      renderShowCurrent(); startRotation();
+      // Show the wall that was last opened in the editor.
+      const want = gallery.walls.findIndex((w) => w.id === gallery.settings.currentWall);
+      const shownId = curWallSafe()?.id;
+      if (want >= 0 && gallery.walls[want].id !== shownId) fadeToWall(want);
+      else { wallIndex = want >= 0 ? want : Math.min(wallIndex, gallery.walls.length - 1); renderShowCurrent(); }
+      startRotation();
       listenForPings();
     }
   } catch {}
@@ -1117,6 +1128,8 @@ async function decodeGallery(code) {
   gallery = fromLink || fromCloud || fromLocal || sampleGallery();
   if (fromCloud && gallery === fromCloud) lastCloudJson = JSON.stringify(fromCloud);
   if (fromLink) { lsSet(LS_KEY, JSON.stringify(gallery)); history.replaceState(null, "", location.pathname + location.search); toast("Layout loaded from link"); }
+  const startAt = gallery.walls.findIndex((w) => w.id === gallery.settings.currentWall);
+  if (startAt >= 0) wallIndex = startAt;
   refreshStatus();
   render();
   if (mode === "show") { requestWake(); startRotation(); }
