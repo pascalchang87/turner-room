@@ -67,7 +67,7 @@ The screensaver starts after the projector's usual idle delay. XGIMI's own power
 ## How the pieces fit together
 
 - The site stores the gallery in the Redis database. Anyone can view it; saving needs the edit key.
-- The projector opens the site in wall mode (`?show=1`) and checks for changes every minute, so a painting you add from your phone appears on the wall shortly after.
+- The projector opens the site in wall mode (`?show=1`). After each save, the editor sends a one-word ping on a private, randomly named ntfy.sh channel; the projector listens there and redraws within a couple of seconds. It also checks the database once a minute in case a ping is missed. The ping carries no gallery data.
 - Without a database (for example, opening the file locally), everything is kept in the browser instead. **Settings → Copy link with this layout** makes a link that carries the whole gallery, which you can open anywhere.
 - Paintings come from Wikimedia Commons (photographs of public-domain works from the Tate, National Gallery and many others) and the Art Institute of Chicago's public-domain collection. The images load straight from those sites.
 
