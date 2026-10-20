@@ -451,6 +451,7 @@ function normalise(g) {
   if (!g || !Array.isArray(g.walls)) return null;
   g.v = 1;
   g.settings = Object.assign({ rotate: 900, brightness: 0.9, lamps: false, labels: true }, g.settings || {});
+  if (g.settings.pingTopic && !/^[A-Za-z0-9_-]{12,64}$/.test(g.settings.pingTopic)) delete g.settings.pingTopic;
   g.walls = g.walls.filter((w) => w && Array.isArray(w.pieces)).map((w) => ({
     id: w.id || uid(), name: String(w.name || "Wall"),
     pieces: w.pieces.filter((p) => p && p.src).map((p) => ({
@@ -757,7 +758,7 @@ function enterShow() {
   mode = "show"; selectedId = null;
   try { document.documentElement.requestFullscreen?.().catch(() => {}); } catch {}
   requestWake();
-  render(); startRotation();
+  render(); startRotation(); listenForPings();
 }
 function leaveShow() {
   if (TV) return;
@@ -1012,7 +1013,7 @@ async function pushCloud(force) {
   try {
     const body = JSON.stringify(gallery);
     const r = await fetch("api/gallery", { method: "PUT", headers: { "content-type": "application/json", "x-edit-key": key }, body });
-    if (r.ok) { lastCloudJson = body; setStatus("Synced with the projector"); return true; }
+    if (r.ok) { lastCloudJson = body; sendPing(); setStatus("Synced with the projector"); return true; }
     setStatus(r.status === 403 ? "The edit key was refused. Check it in Settings." : "Couldn't reach the sync server. Changes are saved on this device.", true);
   } catch { setStatus("Offline. Changes are saved on this device.", true); }
   return false;
@@ -1028,24 +1029,57 @@ async function fetchCloud() {
     return j.gallery ? normalise(j.gallery) : null;
   } catch { cloud = "none"; return null; }
 }
+/* The projector checks the database once a minute, and also listens for a
+   one-word ping on a private ntfy.sh channel, so changes arrive in about a second. */
+const PING_HOST = window.TURNER_PING_HOST || "https://ntfy.sh";
+let pingSource = null, pingTopicOpen = "", pingRetry = 0;
+async function checkCloud() {
+  if (mode !== "show" || cloud !== "ready") return;
+  try {
+    const r = await fetch("api/gallery", { cache: "no-store" });
+    if (!r.ok) return;
+    const j = await r.json();
+    const txt = JSON.stringify(j.gallery);
+    if (j.gallery && txt !== lastCloudJson) {
+      lastCloudJson = txt;
+      gallery = normalise(j.gallery);
+      wallIndex = Math.min(wallIndex, gallery.walls.length - 1);
+      applyBrightness();
+      renderShowCurrent(); startRotation();
+      listenForPings();
+    }
+  } catch {}
+}
 function startPolling() {
   clearInterval(pollTimer);
-  pollTimer = setInterval(async () => {
-    if (mode !== "show" || cloud !== "ready") return;
-    try {
-      const r = await fetch("api/gallery", { cache: "no-store" });
-      if (!r.ok) return;
-      const j = await r.json();
-      const txt = JSON.stringify(j.gallery);
-      if (j.gallery && txt !== lastCloudJson) {
-        lastCloudJson = txt;
-        gallery = normalise(j.gallery);
-        wallIndex = Math.min(wallIndex, gallery.walls.length - 1);
-        applyBrightness();
-        renderShowCurrent(); startRotation();
-      }
-    } catch {}
-  }, 60000);
+  pollTimer = setInterval(checkCloud, 60000);
+  listenForPings();
+}
+function listenForPings() {
+  const topic = gallery?.settings?.pingTopic;
+  if (mode !== "show" || cloud !== "ready" || !topic || !window.EventSource) return;
+  if (pingSource && pingTopicOpen === topic) return;
+  pingSource?.close();
+  pingTopicOpen = topic;
+  pingSource = new EventSource(`${PING_HOST}/${topic}/sse`);
+  pingSource.onmessage = (e) => {
+    let ev = "message";
+    try { ev = JSON.parse(e.data).event || "message"; } catch {}
+    if (ev !== "message") return;
+    // Small random wait so a burst of pings becomes one fetch.
+    clearTimeout(pingRetry); pingRetry = setTimeout(checkCloud, 300 + Math.random() * 400);
+  };
+}
+function sendPing() {
+  const topic = gallery?.settings?.pingTopic;
+  if (!topic) return;
+  fetch(`${PING_HOST}/${topic}`, { method: "POST", body: "changed" }).catch(() => {});
+}
+function ensurePingTopic() {
+  if (gallery.settings.pingTopic) return false;
+  const bytes = crypto.getRandomValues(new Uint8Array(15));
+  gallery.settings.pingTopic = "turner-room-" + Array.from(bytes, (b) => b.toString(36).padStart(2, "0")).join("");
+  return true;
 }
 
 /* layout links: deflate + base64url in the hash */
@@ -1086,6 +1120,7 @@ async function decodeGallery(code) {
   refreshStatus();
   render();
   if (mode === "show") { requestWake(); startRotation(); }
+  if (mode === "edit" && ensurePingTopic() && cloud === "ready") scheduleSave();
   startPolling();
   if (document.fonts?.ready) document.fonts.ready.then(() => render());
 })();
