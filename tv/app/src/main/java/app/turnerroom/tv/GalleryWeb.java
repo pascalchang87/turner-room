@@ -6,7 +6,6 @@ import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.View;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -52,7 +51,6 @@ final class GalleryWeb {
     static WebView create(Context c) {
         final WebView web = new WebView(c);
         web.setBackgroundColor(Color.BLACK);
-        web.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         web.setFocusable(true);
         web.setFocusableInTouchMode(true);
         web.setVerticalScrollBarEnabled(false);
@@ -65,6 +63,10 @@ final class GalleryWeb {
         s.setLoadWithOverviewMode(true);
         s.setUseWideViewPort(true);
         s.setCacheMode(WebSettings.LOAD_DEFAULT);
+        // Keep text exactly as the page draws it: no TV font scaling or minimum size.
+        s.setTextZoom(100);
+        s.setMinimumFontSize(1);
+        s.setMinimumLogicalFontSize(1);
         // The page switches into wall mode when it sees this marker.
         s.setUserAgentString(s.getUserAgentString() + " TurnerRoomTV/1.0");
 

@@ -65,9 +65,10 @@ button { cursor: pointer; }
 .status.warn { color: #e2b56b; }
 
 #stageWrap { position: relative; display: grid; place-items: center; overflow: hidden; padding: 18px max(16px, env(safe-area-inset-right, 0px)) 18px max(16px, env(safe-area-inset-left, 0px)); }
-#stage { position: relative; background: var(--wall); }
+#stage { position: relative; background: var(--wall); contain: layout paint; }
 .editing #stage { box-shadow: 0 0 0 1px #1d1a15, 0 0 0 6px #070605; }
-.wall-layer { position: absolute; inset: 0; transition: opacity 2.6s ease; pointer-events: none; }
+.wall-layer { position: absolute; inset: 0; transition: opacity 2.6s ease; pointer-events: none; will-change: opacity; contain: layout paint; }
+#dim { position: absolute; inset: 0; background: #000; pointer-events: none; }
 .wall-layer .piece { pointer-events: auto; }
 .showing .wall-layer .piece { pointer-events: none; }
 #hint { position: absolute; left: 0; right: 0; bottom: 4px; margin: 0; text-align: center; font-size: 12px; color: #6f6758; pointer-events: none; }
@@ -91,20 +92,20 @@ button { cursor: pointer; }
 .fl { position: relative; border-style: solid; }
 .fl::before { content: ""; position: absolute; inset: calc(-1 * var(--bw)); pointer-events: none; }
 .fl.tex::before {
-  background-image: var(--noise); background-size: 140px 140px; mix-blend-mode: overlay; opacity: .55;
+  background-image: var(--noise); background-size: 128px 128px; opacity: .9;
 }
 .fl.grain::before {
-  background-image: var(--noise); background-size: 900px 9px; mix-blend-mode: overlay; opacity: .7;
+  background-image: var(--noise); background-size: 900px 8px; opacity: 1;
 }
 .fl.bead::before {
   background-image: radial-gradient(circle at 42% 38%, rgba(255,246,214,.85) 0 18%, rgba(214,170,80,.55) 38%, rgba(70,46,12,.75) 62%, transparent 70%);
-  background-size: var(--bw) var(--bw); mix-blend-mode: hard-light; opacity: .8;
+  background-size: var(--bw) var(--bw); opacity: .7;
 }
 .fl.leaf::before {
   background-image:
     repeating-linear-gradient(45deg, rgba(255,240,200,.38) 0 calc(var(--bw) * .14), rgba(60,40,10,.42) calc(var(--bw) * .14) calc(var(--bw) * .3), transparent calc(var(--bw) * .3) calc(var(--bw) * .5)),
     var(--noise);
-  background-size: auto, 140px 140px; mix-blend-mode: overlay; opacity: .8;
+  background-size: auto, 128px 128px; opacity: .55;
 }
 .mat { position: relative; }
 .sight { position: relative; overflow: hidden; background: #0d0c0a; }
@@ -117,9 +118,12 @@ button { cursor: pointer; }
 .lamp .cone { position: absolute; left: -10%; right: -10%; top: 100%; border-radius: 50%; background: radial-gradient(ellipse at 50% 0%, rgba(255,222,160,.10), transparent 70%); }
 
 .label {
-  position: absolute; bottom: 0; background: var(--label-card); color: var(--label-ink);
-  box-shadow: 0 0 0 .5px rgba(0,0,0,.4); pointer-events: none;
+  position: absolute; bottom: 0; width: 320px; padding: 24px 28px 28px; display: grid; gap: 10px;
+  background: var(--label-card); color: var(--label-ink); pointer-events: none;
 }
+.label .artist { font-size: 19px; line-height: 1.2; }
+.label .title { font-size: 25px; }
+.label .credit { font-size: 13px; }
 .label .artist { font-family: var(--ui); font-weight: 600; letter-spacing: .01em; }
 .label .life { font-family: var(--ui); color: #5a5246; }
 .label .title { font-family: var(--display); font-style: italic; font-weight: 500; line-height: 1.12; text-wrap: balance; }
@@ -222,6 +226,7 @@ button { cursor: pointer; }
     <div id="stage">
       <div class="wall-layer" id="layerA"></div>
       <div class="wall-layer" id="layerB" style="opacity:0"></div>
+      <div id="dim"></div>
       <div id="guides"></div>
     </div>
     <p id="hint">Drag to move · drag the brass dot to resize · arrow keys nudge</p>
@@ -336,7 +341,18 @@ button { cursor: pointer; }
 const W = 1000, H = 562.5;               // wall units (16:9)
 const LS_KEY = "turner-room:v1";
 const LS_EDITKEY = "turner-room:editkey";
-const NOISE = `url("data:image/svg+xml;utf8,${encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%' height='100%' filter='url(#n)'/></svg>")}")`;
+const NOISE = (() => {
+  try {
+    const c = document.createElement("canvas"); c.width = c.height = 128;
+    const x = c.getContext("2d"); const img = x.createImageData(128, 128);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const light = Math.random() < 0.5;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = light ? 255 : 0; img.data[i + 3] = Math.random() * 46;
+    }
+    x.putImageData(img, 0, 0);
+    return `url(${c.toDataURL("image/png")})`;
+  } catch { return "none"; }
+})();
 document.documentElement.style.setProperty("--noise", NOISE);
 
 /* Frame moulding profiles, listed outside edge -> sight edge.
@@ -535,12 +551,12 @@ function pieceHTML(p) {
   let label = "";
   if (p.label && gallery.settings.labels) {
     const rightRoom = W - (p.x + d.ow / 2);
-    const side = rightRoom >= LABEL_W + LABEL_GAP + 4 ? `left:calc(100% + ${S(LABEL_GAP)})` : `right:calc(100% + ${S(LABEL_GAP)})`;
-    const fs = (v) => S(v);
-    label = `<div class="label" style="${side};width:${S(LABEL_W)};padding:${S(5)} ${S(6)} ${S(6)};display:grid;gap:${S(2.4)}">
-      <div><div class="artist" style="font-size:${fs(4)}">${esc(p.artist || "Unknown artist")}</div></div>
-      <div class="title" style="font-size:${fs(5.2)}">${esc(p.title)}<span class="date" style="font-style:normal">${p.date ? ", " + esc(p.date) : ""}</span></div>
-      ${p.credit ? `<div class="credit" style="font-size:${fs(2.8)}">${esc(p.credit)}</div>` : ""}
+    const right = rightRoom >= LABEL_W + LABEL_GAP + 4;
+    const side = right ? `left:calc(100% + ${S(LABEL_GAP)});transform-origin:0 100%` : `right:calc(100% + ${S(LABEL_GAP)});transform-origin:100% 100%`;
+    label = `<div class="label" style="${side};transform:scale(${(LABEL_W * u / 320).toFixed(4)})">
+      <div class="artist">${esc(p.artist || "Unknown artist")}</div>
+      <div class="title">${esc(p.title)}<span class="date" style="font-style:normal">${p.date ? ", " + esc(p.date) : ""}</span></div>
+      ${p.credit ? `<div class="credit">${esc(p.credit)}</div>` : ""}
     </div>`;
   }
   const hs = 16;
@@ -608,7 +624,7 @@ function render() {
   document.body.classList.toggle("showing", mode === "show");
   document.body.classList.toggle("tv", TV);
   fitStage();
-  el.stage.style.filter = `brightness(${gallery.settings.brightness})`;
+  applyBrightness();
   if (mode === "edit") {
     front = el.A; back = el.B;
     el.A.style.opacity = 1; el.B.style.opacity = 0; el.B.innerHTML = "";
@@ -619,6 +635,7 @@ function render() {
     renderShowCurrent();
   }
 }
+function applyBrightness() { $("#dim").style.opacity = String(1 - gallery.settings.brightness); }
 function renderShowCurrent() {
   renderWallInto(front, curWall());
   front.style.opacity = 1; back.style.opacity = 0;
@@ -1024,7 +1041,7 @@ function startPolling() {
         lastCloudJson = txt;
         gallery = normalise(j.gallery);
         wallIndex = Math.min(wallIndex, gallery.walls.length - 1);
-        el.stage.style.filter = `brightness(${gallery.settings.brightness})`;
+        applyBrightness();
         renderShowCurrent(); startRotation();
       }
     } catch {}
