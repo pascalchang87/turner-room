@@ -1,0 +1,1077 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Turner Room</title>
+<meta name="theme-color" content="#000000">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600&display=swap">
+<style>
+/* Layout: a 16:9 pitch-black wall (1000 x 562.5 wall units) fills the screen; edit chrome floats above it in warm gallery-night tones. */
+:root {
+  --wall: #000;
+  --panel: #16130f;
+  --panel-2: #1f1b15;
+  --line: #2f2a21;
+  --ink: #ece4d3;
+  --ink-dim: #a39a88;
+  --brass: #c9a35a;
+  --brass-ink: #1a1408;
+  --danger: #d9776a;
+  --label-card: #efe9dc;
+  --label-ink: #1d1a15;
+  --display: "Cormorant Garamond", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --ui: "Figtree", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; background: var(--wall); color: var(--ink); font-family: var(--ui); font-size: 14px; }
+body { overflow: hidden; -webkit-tap-highlight-color: transparent; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+
+/* ---------- App frame ---------- */
+#app { position: fixed; inset: 0; display: grid; grid-template-rows: auto 1fr; }
+#bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+  padding: max(10px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px));
+  background: linear-gradient(var(--panel), #0f0d0a);
+  border-bottom: 1px solid var(--line);
+  z-index: 20;
+}
+.brand { font-family: var(--display); font-size: 22px; font-weight: 600; letter-spacing: .01em; white-space: nowrap; }
+.brand small { font-family: var(--ui); font-size: 11px; color: var(--ink-dim); letter-spacing: .14em; text-transform: uppercase; margin-left: 8px; font-weight: 500; }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; flex: 1 1 260px; min-width: 0; }
+.tab {
+  border: 1px solid var(--line); background: transparent; border-radius: 999px;
+  padding: 5px 12px; color: var(--ink-dim); white-space: nowrap;
+}
+.tab[aria-selected="true"] { background: var(--panel-2); color: var(--ink); border-color: #4a412f; }
+.tab.add { border-style: dashed; }
+.actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.btn {
+  border: 1px solid var(--line); background: var(--panel-2); border-radius: 8px;
+  padding: 7px 12px; white-space: nowrap;
+}
+.btn:hover { border-color: #4a412f; }
+.btn.primary { background: var(--brass); color: var(--brass-ink); border-color: var(--brass); font-weight: 600; }
+.btn.ghost { background: transparent; }
+.btn.danger { color: var(--danger); }
+.status { font-size: 12px; color: var(--ink-dim); padding: 0 4px; max-width: 280px; }
+.status.warn { color: #e2b56b; }
+
+#stageWrap { position: relative; display: grid; place-items: center; overflow: hidden; padding: 18px max(16px, env(safe-area-inset-right, 0px)) 18px max(16px, env(safe-area-inset-left, 0px)); }
+#stage { position: relative; background: var(--wall); }
+.editing #stage { box-shadow: 0 0 0 1px #1d1a15, 0 0 0 6px #070605; }
+.wall-layer { position: absolute; inset: 0; transition: opacity 2.6s ease; pointer-events: none; }
+.wall-layer .piece { pointer-events: auto; }
+.showing .wall-layer .piece { pointer-events: none; }
+#hint { position: absolute; left: 0; right: 0; bottom: 4px; margin: 0; text-align: center; font-size: 12px; color: #6f6758; pointer-events: none; }
+
+/* show mode: wall fills the screen */
+.showing #bar, .showing #hint, .showing #inspector { display: none !important; }
+.showing #app { grid-template-rows: 1fr; }
+.showing #stageWrap { padding: 0; }
+.showing.tv, .showing.tv * { cursor: none !important; }
+#exitShow {
+  position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); top: max(16px, env(safe-area-inset-top, 0px));
+  z-index: 40; opacity: 0; transition: opacity .4s; pointer-events: none;
+}
+#exitShow.visible { opacity: 1; pointer-events: auto; }
+
+/* ---------- Paintings ---------- */
+.piece { position: absolute; touch-action: none; user-select: none; -webkit-user-select: none; }
+.editing .piece { cursor: grab; }
+.editing .piece.dragging { cursor: grabbing; }
+.frame { position: relative; display: inline-block; }
+.fl { position: relative; border-style: solid; }
+.fl::before { content: ""; position: absolute; inset: calc(-1 * var(--bw)); pointer-events: none; }
+.fl.tex::before {
+  background-image: var(--noise); background-size: 140px 140px; mix-blend-mode: overlay; opacity: .55;
+}
+.fl.grain::before {
+  background-image: var(--noise); background-size: 900px 9px; mix-blend-mode: overlay; opacity: .7;
+}
+.fl.bead::before {
+  background-image: radial-gradient(circle at 42% 38%, rgba(255,246,214,.85) 0 18%, rgba(214,170,80,.55) 38%, rgba(70,46,12,.75) 62%, transparent 70%);
+  background-size: var(--bw) var(--bw); mix-blend-mode: hard-light; opacity: .8;
+}
+.fl.leaf::before {
+  background-image:
+    repeating-linear-gradient(45deg, rgba(255,240,200,.38) 0 calc(var(--bw) * .14), rgba(60,40,10,.42) calc(var(--bw) * .14) calc(var(--bw) * .3), transparent calc(var(--bw) * .3) calc(var(--bw) * .5)),
+    var(--noise);
+  background-size: auto, 140px 140px; mix-blend-mode: overlay; opacity: .8;
+}
+.mat { position: relative; }
+.sight { position: relative; overflow: hidden; background: #0d0c0a; }
+.sight img { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.sight .glaze { position: absolute; inset: 0; pointer-events: none; }
+.sight .missing { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 8%; color: #6f6758; font-size: 12px; }
+.lamp { position: absolute; left: 50%; transform: translateX(-50%); pointer-events: none; }
+.lamp .bar { position: absolute; inset: 0; border-radius: 999px; background: linear-gradient(#f3d892, #a7802f 55%, #4c3510); }
+.lamp .arm { position: absolute; left: 50%; width: 14%; transform: translateX(-50%); background: linear-gradient(90deg, #6b4d1c, #d4b062, #6b4d1c); }
+.lamp .cone { position: absolute; left: -10%; right: -10%; top: 100%; border-radius: 50%; background: radial-gradient(ellipse at 50% 0%, rgba(255,222,160,.10), transparent 70%); }
+
+.label {
+  position: absolute; bottom: 0; background: var(--label-card); color: var(--label-ink);
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.4); pointer-events: none;
+}
+.label .artist { font-family: var(--ui); font-weight: 600; letter-spacing: .01em; }
+.label .life { font-family: var(--ui); color: #5a5246; }
+.label .title { font-family: var(--display); font-style: italic; font-weight: 500; line-height: 1.12; text-wrap: balance; }
+.label .date { font-family: var(--display); }
+.label .credit { font-family: var(--ui); color: #6a6153; line-height: 1.3; }
+
+.handle { position: absolute; display: none; border-radius: 50%; background: var(--brass); border: 2px solid #0b0a08; touch-action: none; cursor: nwse-resize; }
+.editing .piece.sel .handle { display: block; }
+.editing .piece.sel .frame { outline: 1.5px solid var(--brass); outline-offset: 5px; }
+.guide { position: absolute; background: rgba(201,163,90,.65); pointer-events: none; }
+.guide.v { width: 1px; top: 0; bottom: 0; }
+.guide.h { height: 1px; left: 0; right: 0; }
+.empty-wall { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: #6f6758; font-family: var(--display); font-size: 20px; padding: 24px; }
+
+/* ---------- Inspector ---------- */
+#inspector {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: max(14px, env(safe-area-inset-bottom, 0px));
+  width: min(760px, calc(100vw - 32px));
+  background: color-mix(in srgb, var(--panel) 94%, transparent); backdrop-filter: blur(8px);
+  border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px;
+  display: grid; gap: 10px; z-index: 30;
+}
+.ins-head { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; min-width: 0; }
+.ins-title { font-family: var(--display); font-size: 19px; font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ins-title span { font-family: var(--ui); font-style: normal; font-size: 12px; color: var(--ink-dim); margin-left: 6px; }
+.ins-row { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 6px 10px; color: var(--ink-dim); display: inline-flex; align-items: center; gap: 6px; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--panel-2); color: var(--ink); }
+.swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; box-shadow: inset 0 0 0 1px rgba(0,0,0,.4); }
+.field { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-dim); font-size: 13px; }
+.field input[type=range] { width: 120px; accent-color: var(--brass); }
+.check { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-dim); font-size: 13px; }
+.check input { accent-color: var(--brass); width: 16px; height: 16px; }
+
+/* ---------- Panels ---------- */
+.panel {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 100vw); z-index: 50;
+  background: var(--panel); border-left: 1px solid var(--line);
+  display: grid; grid-template-rows: auto 1fr auto;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  box-shadow: -30px 0 60px rgba(0,0,0,.5);
+}
+.panel header { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px 10px; }
+.panel h2 { margin: 0; font-family: var(--display); font-weight: 600; font-size: 24px; }
+.panel .body { overflow-y: auto; padding: 4px 18px 18px; display: grid; gap: 14px; align-content: start; min-width: 0; }
+.panel footer { padding: 10px 18px 14px; font-size: 12px; color: var(--ink-dim); border-top: 1px solid var(--line); }
+.x { border: 0; background: transparent; font-size: 22px; line-height: 1; color: var(--ink-dim); padding: 4px 8px; }
+.search { display: flex; gap: 6px; }
+.search input { flex: 1; min-width: 0; padding: 9px 11px; border-radius: 9px; border: 1px solid var(--line); background: #0d0b09; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 4px 10px; font-size: 12.5px; color: var(--ink-dim); }
+.chip:hover { color: var(--ink); border-color: #4a412f; }
+.results { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
+.result { border: 1px solid transparent; background: transparent; padding: 0; text-align: left; border-radius: 8px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.result:hover .thumb, .result:focus-visible .thumb { outline: 2px solid var(--brass); outline-offset: 2px; }
+.thumb { aspect-ratio: 4 / 3; background: #0d0b09 center / contain no-repeat; border-radius: 4px; max-width: 100%; }
+.result .t { font-family: var(--display); font-style: italic; font-size: 15px; line-height: 1.15; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.result .a { font-size: 11.5px; color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.result.added .thumb { outline: 2px solid #7fae7a; outline-offset: 2px; }
+.note { font-size: 12.5px; color: var(--ink-dim); line-height: 1.45; }
+.group { display: grid; gap: 8px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.group:last-child { border-bottom: 0; }
+.group h3 { margin: 0; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-dim); font-weight: 600; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row input[type=text], .row input[type=password], .row select { flex: 1 1 160px; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: #0d0b09; }
+.copybox { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: #0d0b09; font-size: 12px; color: var(--ink-dim); }
+.scrim { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 45; }
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%); top: max(70px, calc(env(safe-area-inset-top, 0px) + 60px));
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 8px 16px; z-index: 60; font-size: 13px;
+}
+@media (max-width: 640px) {
+  .brand small { display: none; }
+  .actions { width: 100%; }
+  .actions .btn { flex: 1 1 auto; }
+  .status { width: 100%; order: 9; }
+  .field input[type=range] { width: 100px; }
+}
+@media (prefers-reduced-motion: reduce) { .wall-layer { transition: none; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="bar">
+    <div class="brand">The Turner Room<small>Night gallery</small></div>
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Walls"></nav>
+    <div class="actions">
+      <span class="status" id="status" role="status"></span>
+      <button class="btn primary" id="btnAdd">Add painting</button>
+      <button class="btn" id="btnHang">Hang evenly</button>
+      <button class="btn" id="btnSettings">Settings</button>
+      <button class="btn" id="btnShow">Show on wall</button>
+    </div>
+  </header>
+  <main id="stageWrap">
+    <div id="stage">
+      <div class="wall-layer" id="layerA"></div>
+      <div class="wall-layer" id="layerB" style="opacity:0"></div>
+      <div id="guides"></div>
+    </div>
+    <p id="hint">Drag to move · drag the brass dot to resize · arrow keys nudge</p>
+  </main>
+</div>
+
+<div id="inspector" hidden>
+  <div class="ins-head">
+    <div class="ins-title" id="insTitle"></div>
+    <button class="x" id="insClose" aria-label="Deselect">×</button>
+  </div>
+  <div class="ins-row">
+    <div class="seg" id="frameSeg" role="group" aria-label="Frame"></div>
+  </div>
+  <div class="ins-row">
+    <label class="field" for="sizeRange">Size <input type="range" id="sizeRange" min="40" max="900" step="2"></label>
+    <label class="field" for="matRange">Mat <input type="range" id="matRange" min="0" max="0.3" step="0.01"></label>
+    <label class="check" for="labelCheck"><input type="checkbox" id="labelCheck"> Wall label</label>
+    <span style="flex:1"></span>
+    <button class="btn ghost" id="btnFront">Bring to front</button>
+    <button class="btn ghost danger" id="btnRemove">Remove</button>
+  </div>
+</div>
+
+<div class="scrim" id="scrim" hidden></div>
+
+<aside class="panel" id="addPanel" hidden aria-label="Add a painting">
+  <header><h2>Add a painting</h2><button class="x" data-close aria-label="Close">×</button></header>
+  <div class="body">
+    <div class="seg" id="sourceSeg" role="group" aria-label="Collection">
+      <button data-src="commons" aria-pressed="true">Wikimedia Commons</button>
+      <button data-src="aic" aria-pressed="false">Art Institute of Chicago</button>
+    </div>
+    <form class="search" id="searchForm">
+      <input id="searchInput" type="search" placeholder="Artist or painting, e.g. Turner Venice" autocomplete="off" enterkeyhint="search">
+      <button class="btn primary" type="submit">Search</button>
+    </form>
+    <div class="chips" id="chips"></div>
+    <p class="note" id="searchNote"></p>
+    <div class="results" id="results"></div>
+  </div>
+  <footer>Commons holds photographs of public-domain paintings from museums worldwide, including the Tate and National Gallery. Chicago results are limited to public-domain works.</footer>
+</aside>
+
+<aside class="panel" id="settingsPanel" hidden aria-label="Settings">
+  <header><h2>Settings</h2><button class="x" data-close aria-label="Close">×</button></header>
+  <div class="body">
+    <section class="group">
+      <h3>This wall</h3>
+      <div class="row">
+        <input type="text" id="wallName" aria-label="Wall name">
+        <button class="btn danger" id="btnDeleteWall">Delete wall</button>
+      </div>
+      <div class="row" id="deleteConfirm" hidden>
+        <span class="note">Delete this wall and its paintings?</span>
+        <button class="btn danger" id="btnDeleteYes">Delete</button>
+        <button class="btn" id="btnDeleteNo">Keep</button>
+      </div>
+    </section>
+    <section class="group">
+      <h3>On the wall</h3>
+      <div class="row">
+        <label class="field" for="rotateSel" style="flex:1">Change wall every</label>
+        <select id="rotateSel">
+          <option value="0">Never</option>
+          <option value="60">1 minute</option>
+          <option value="300">5 minutes</option>
+          <option value="900">15 minutes</option>
+          <option value="1800">30 minutes</option>
+          <option value="3600">1 hour</option>
+        </select>
+      </div>
+      <label class="field" for="brightRange">Brightness <input type="range" id="brightRange" min="0.35" max="1" step="0.05"></label>
+      <label class="check" for="lampsCheck"><input type="checkbox" id="lampsCheck"> Brass picture lights above frames</label>
+      <label class="check" for="labelsCheck"><input type="checkbox" id="labelsCheck"> Show wall labels</label>
+    </section>
+    <section class="group">
+      <h3>Sync with the projector</h3>
+      <p class="note" id="syncNote"></p>
+      <div class="row" id="keyRow">
+        <input type="password" id="editKey" placeholder="Edit key" autocomplete="off" aria-label="Edit key">
+        <button class="btn" id="btnSaveKey">Save key</button>
+      </div>
+      <div class="row">
+        <button class="btn" id="btnCopyTv">Copy projector address</button>
+        <button class="btn" id="btnCopyLink">Copy link with this layout</button>
+      </div>
+      <input class="copybox" id="copyBox" readonly hidden aria-label="Link to copy">
+    </section>
+    <section class="group">
+      <h3>Start over</h3>
+      <div class="row">
+        <button class="btn" id="btnReset">Restore sample walls</button>
+      </div>
+      <div class="row" id="resetConfirm" hidden>
+        <span class="note">Replace all walls with the samples?</span>
+        <button class="btn danger" id="btnResetYes">Replace</button>
+        <button class="btn" id="btnResetNo">Cancel</button>
+      </div>
+    </section>
+  </div>
+  <footer>Press <b>E</b> or tap the screen to leave the wall view. On the projector, use left and right on the remote to change walls.</footer>
+</aside>
+
+<button class="btn" id="exitShow">Edit walls</button>
+
+<script>
+"use strict";
+/* ============================================================
+   Constants
+   ============================================================ */
+const W = 1000, H = 562.5;               // wall units (16:9)
+const LS_KEY = "turner-room:v1";
+const LS_EDITKEY = "turner-room:editkey";
+const NOISE = `url("data:image/svg+xml;utf8,${encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%' height='100%' filter='url(#n)'/></svg>")}")`;
+document.documentElement.style.setProperty("--noise", NOISE);
+
+/* Frame moulding profiles, listed outside edge -> sight edge.
+   f: share of moulding width, c: base colour, d: +1 faces the light, -1 is a cove. */
+const FRAMES = {
+  gilt: { name: "Gilded", swatch: "#c9a04f", width: 0.13, layers: [
+    { f: .06, c: "#4a3512", d: 1 },
+    { f: .20, c: "#a77d33", d: -1, cls: "tex" },
+    { f: .07, c: "#e8c87a", d: 1, cls: "bead" },
+    { f: .08, c: "#6e5221", d: -1 },
+    { f: .30, c: "#c49b4b", d: 1, cls: "leaf" },
+    { f: .06, c: "#efd38a", d: 1 },
+    { f: .23, c: "#8a682a", d: -1, cls: "tex" } ] },
+  walnut: { name: "Walnut", swatch: "#5b3a22", width: 0.09, layers: [
+    { f: .12, c: "#2a1a10", d: 1 },
+    { f: .46, c: "#5b3a22", d: 1, cls: "grain" },
+    { f: .12, c: "#c49b4b", d: 1, cls: "tex" },
+    { f: .30, c: "#3d2716", d: -1, cls: "grain" } ] },
+  silver: { name: "Silver", swatch: "#b4b4ba", width: 0.09, layers: [
+    { f: .08, c: "#3b3b3e", d: 1 },
+    { f: .32, c: "#9a9aa0", d: -1, cls: "tex" },
+    { f: .07, c: "#e6e6ea", d: 1, cls: "bead" },
+    { f: .35, c: "#b4b4ba", d: 1, cls: "tex" },
+    { f: .18, c: "#6c6c72", d: -1 } ] },
+  ebony: { name: "Ebony", swatch: "#1f1c19", width: 0.05, layers: [
+    { f: .30, c: "#1b1815", d: 1, cls: "tex" },
+    { f: .50, c: "#24201c", d: 1 },
+    { f: .20, c: "#0c0b0a", d: -1 } ] }
+};
+
+const SOURCES = {
+  commons: { chips: ["J. M. W. Turner", "Turner Venice", "Turner watercolour", "John Constable", "Caspar David Friedrich", "Claude Lorrain", "Whistler nocturne", "Monet Thames", "Aivazovsky"] },
+  aic: { chips: ["Turner", "Constable", "Claude Monet", "Whistler", "Corot", "Inness", "Bierstadt", "Homer"] }
+};
+
+/* Sample walls. Each painting has a Commons file name plus a search fallback,
+   so a renamed file still finds its picture. */
+function commonsFile(name, width) {
+  return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(name.replace(/ /g, "_"))}?width=${width}`;
+}
+function seed(file, q, title, artist, date, ar, frame = "gilt", mat = 0) {
+  return { id: uid(), src: commonsFile(file, 1920), thumb: commonsFile(file, 330), q, title, artist, date,
+    credit: "Wikimedia Commons, public domain", ar, w: 260, x: W / 2, y: H / 2, frame, mat, label: true };
+}
+function sampleGallery() {
+  const g = {
+    v: 1,
+    settings: { rotate: 900, brightness: 0.9, lamps: false, labels: true },
+    walls: [
+      { id: uid(), name: "Turner", pieces: [
+        seed("Turner - Rain, Steam and Speed - National Gallery file.jpg", "Turner Rain Steam and Speed", "Rain, Steam and Speed – The Great Western Railway", "Joseph Mallord William Turner", "1844", 1.34),
+        seed("The Fighting Temeraire, JMW Turner, National Gallery.jpg", "Turner Fighting Temeraire National Gallery", "The Fighting Temeraire", "Joseph Mallord William Turner", "1839", 1.34),
+        seed("Slave-ship.jpg", "Turner Slave Ship Typhoon coming on", "Slave Ship (Slavers Throwing Overboard the Dead and Dying, Typhoon Coming On)", "Joseph Mallord William Turner", "1840", 1.35) ] },
+      { id: uid(), name: "Turner, late light", pieces: [
+        seed("Joseph Mallord William Turner - Norham Castle, Sunrise - WGA23178.jpg", "Turner Norham Castle Sunrise", "Norham Castle, Sunrise", "Joseph Mallord William Turner", "c. 1845", 1.32),
+        seed("Joseph Mallord William Turner - Snow Storm - Steam-Boat off a Harbour's Mouth - WGA23177.jpg", "Turner Snow Storm Steam-Boat off a Harbour's Mouth", "Snow Storm – Steam-Boat off a Harbour's Mouth", "Joseph Mallord William Turner", "1842", 1.33) ] },
+      { id: uid(), name: "His contemporaries", pieces: [
+        seed("John Constable The Hay Wain.jpg", "Constable The Hay Wain", "The Hay Wain", "John Constable", "1821", 1.41, "walnut"),
+        seed("Caspar David Friedrich - Wanderer above the sea of fog.jpg", "Friedrich Wanderer above the Sea of Fog", "Wanderer above the Sea of Fog", "Caspar David Friedrich", "c. 1818", 0.79, "ebony"),
+        seed("Claude Monet, Impression, soleil levant.jpg", "Monet Impression soleil levant", "Impression, Sunrise", "Claude Monet", "1872", 1.30) ] }
+    ]
+  };
+  g.walls.forEach(hangEvenly);
+  return g;
+}
+
+/* ============================================================
+   State
+   ============================================================ */
+const params = new URLSearchParams(location.search);
+const hashParams = new URLSearchParams(location.hash.slice(1));
+const TV = params.has("show") || hashParams.has("show") || /TurnerRoomTV/.test(navigator.userAgent);
+let gallery = null;
+let wallIndex = 0;
+let mode = TV ? "show" : "edit";
+let selectedId = null;
+let cloud = "unknown";       // unknown | ready | nostore | none
+let cloudEditable = false;
+let lastCloudJson = "";
+let saveTimer = 0, rotateTimer = 0, pollTimer = 0;
+let u = 1;                   // px per wall unit
+let front, back;
+const $ = (s) => document.querySelector(s);
+const el = { stage: $("#stage"), wrap: $("#stageWrap"), A: $("#layerA"), B: $("#layerB"), guides: $("#guides"), tabs: $("#tabs"), status: $("#status") };
+front = el.A; back = el.B;
+
+function uid() { return Math.random().toString(36).slice(2, 10); }
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function curWall() { return gallery.walls[wallIndex]; }
+function findPiece(id) { return curWall().pieces.find((p) => p.id === id); }
+function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
+
+function normalise(g) {
+  if (!g || !Array.isArray(g.walls)) return null;
+  g.v = 1;
+  g.settings = Object.assign({ rotate: 900, brightness: 0.9, lamps: false, labels: true }, g.settings || {});
+  g.walls = g.walls.filter((w) => w && Array.isArray(w.pieces)).map((w) => ({
+    id: w.id || uid(), name: String(w.name || "Wall"),
+    pieces: w.pieces.filter((p) => p && p.src).map((p) => ({
+      id: p.id || uid(), src: p.src, thumb: p.thumb || p.src, q: p.q || "", title: p.title || "Untitled",
+      artist: p.artist || "", date: p.date || "", credit: p.credit || "", ar: +p.ar || 1.33,
+      w: clamp(+p.w || 240, 30, 960), x: clamp(+p.x || W / 2, 0, W), y: clamp(+p.y || H / 2, 0, H),
+      frame: FRAMES[p.frame] ? p.frame : "gilt", mat: clamp(+p.mat || 0, 0, 0.3), label: p.label !== false
+    }))
+  }));
+  if (!g.walls.length) g.walls.push({ id: uid(), name: "Wall 1", pieces: [] });
+  return g;
+}
+
+/* ============================================================
+   Geometry
+   ============================================================ */
+function dims(p) {
+  const iw = p.w, ih = p.w / p.ar;
+  const base = (iw + ih) / 2;
+  const prof = FRAMES[p.frame] || FRAMES.gilt;
+  const fw = clamp(base * prof.width, 4, 60);
+  const mw = base * p.mat;
+  return { iw, ih, fw, mw, ow: iw + 2 * (fw + mw), oh: ih + 2 * (fw + mw), prof };
+}
+const LABEL_W = 64, LABEL_GAP = 14;
+
+function hangEvenly(wall) {
+  const ps = wall.pieces;
+  if (!ps.length) return;
+  const n = ps.length;
+  const rows = n <= 4 ? [ps] : [ps.slice(0, Math.ceil(n / 2)), ps.slice(Math.ceil(n / 2))];
+  const labels = !gallery || gallery.settings.labels;
+  const rowH = rows.length === 1 ? H * 0.62 : H * 0.36;
+  const baseH = rows.length === 1 ? [0, 330, 260, 210, 170][n] : rowH * 0.78;
+  rows.forEach((row, ri) => {
+    const gap = row.some((p) => p.label) && labels ? LABEL_W + LABEL_GAP * 2 : 46;
+    let h = baseH;
+    let total = 0;
+    for (let iter = 0; iter < 30; iter++) {
+      total = 0;
+      row.forEach((p) => { p.w = h * p.ar; total += dims(p).ow; });
+      total += gap * (row.length - 1) + (labels && row[row.length - 1].label ? LABEL_W + LABEL_GAP : 0);
+      if (total <= W * 0.9 && row.every((p) => dims(p).oh <= rowH)) break;
+      h *= 0.94;
+    }
+    let cx = (W - total) / 2;
+    const cy = rows.length === 1 ? H * 0.5 : H * (ri === 0 ? 0.29 : 0.73);
+    row.forEach((p) => {
+      const d = dims(p);
+      p.x = cx + d.ow / 2; p.y = cy; cx += d.ow + gap;
+    });
+  });
+}
+
+/* ============================================================
+   Rendering
+   ============================================================ */
+function shade(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  let r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  const t = amt < 0 ? 0 : 255, a = Math.abs(amt);
+  r = Math.round(r + (t - r) * a); g = Math.round(g + (t - g) * a); b = Math.round(b + (t - b) * a);
+  return `rgb(${r},${g},${b})`;
+}
+function sides(c, d) {
+  // light from upper left: top brightest, bottom darkest; coves invert
+  return [shade(c, .30 * d), shade(c, -.28 * d), shade(c, -.42 * d), shade(c, .14 * d)];
+}
+
+function pieceHTML(p) {
+  const d = dims(p);
+  const S = (v) => (v * u).toFixed(2) + "px";
+  let inner;
+  const glaze = gallery.settings.lamps
+    ? "linear-gradient(to bottom, rgba(255,226,170,.18), rgba(255,226,170,.04) 40%, rgba(0,0,0,.12))"
+    : "linear-gradient(to bottom, rgba(255,250,235,.04), transparent 35%, rgba(0,0,0,.10))";
+  const frameShadow = `inset 0 ${S(d.fw * .10)} ${S(d.fw * .22)} rgba(0,0,0,.6), inset 0 0 ${S(d.fw * .06)} rgba(0,0,0,.7)`;
+  const sight = `<div class="sight" style="width:${S(d.iw)};height:${S(d.ih)};${p.mat ? `box-shadow:0 0 0 ${S(Math.max(.6, d.mw * .03))} #f6f1e4` : ""}">
+      <img src="${esc(p.src)}" alt="${esc(p.title)}" loading="eager" decoding="async" referrerpolicy="no-referrer" draggable="false">
+      <i class="glaze" style="background:${glaze};${p.mat ? "" : `box-shadow:${frameShadow}`}"></i></div>`;
+  inner = p.mat
+    ? `<div class="mat" style="padding:${S(d.mw)};background:#ece4d2;box-shadow:${frameShadow}">${sight}</div>`
+    : sight;
+  const L = d.prof.layers;
+  for (let i = L.length - 1; i >= 0; i--) {
+    const l = L[i];
+    const bw = l.f * d.fw * u;
+    const [t, r, b, lf] = sides(l.c, l.d);
+    inner = `<div class="fl ${l.cls || ""}" style="--bw:${bw.toFixed(2)}px;border-width:${bw.toFixed(2)}px;border-color:${t} ${r} ${b} ${lf}">${inner}</div>`;
+  }
+  let lamp = "";
+  if (gallery.settings.lamps) {
+    const lw = d.ow * 0.42, lh = Math.max(3, d.ow * 0.022), arm = d.fw * 0.9 + 6;
+    lamp = `<div class="lamp" style="width:${S(lw)};height:${S(lh)};top:${S(-arm - lh)}">
+      <div class="arm" style="top:100%;height:${S(arm)}"></div><div class="bar"></div>
+      <div class="cone" style="height:${S(d.oh * .5)}"></div></div>`;
+  }
+  let label = "";
+  if (p.label && gallery.settings.labels) {
+    const rightRoom = W - (p.x + d.ow / 2);
+    const side = rightRoom >= LABEL_W + LABEL_GAP + 4 ? `left:calc(100% + ${S(LABEL_GAP)})` : `right:calc(100% + ${S(LABEL_GAP)})`;
+    const fs = (v) => S(v);
+    label = `<div class="label" style="${side};width:${S(LABEL_W)};padding:${S(5)} ${S(6)} ${S(6)};display:grid;gap:${S(2.4)}">
+      <div><div class="artist" style="font-size:${fs(4)}">${esc(p.artist || "Unknown artist")}</div></div>
+      <div class="title" style="font-size:${fs(5.2)}">${esc(p.title)}<span class="date" style="font-style:normal">${p.date ? ", " + esc(p.date) : ""}</span></div>
+      ${p.credit ? `<div class="credit" style="font-size:${fs(2.8)}">${esc(p.credit)}</div>` : ""}
+    </div>`;
+  }
+  const hs = 16;
+  return `<div class="piece${p.id === selectedId ? " sel" : ""}" data-id="${p.id}" style="left:${S(p.x - d.ow / 2)};top:${S(p.y - d.oh / 2)};width:${S(d.ow)};height:${S(d.oh)}">
+    ${lamp}<div class="frame">${inner}</div>${label}
+    <div class="handle" data-handle style="width:${hs}px;height:${hs}px;right:${-hs / 2 - 6}px;bottom:${-hs / 2 - 6}px"></div></div>`;
+}
+
+function renderWallInto(layer, wall) {
+  if (!wall.pieces.length) {
+    layer.innerHTML = mode === "edit"
+      ? `<div class="empty-wall">An empty wall. Use “Add painting” to hang the first work.</div>` : "";
+    return;
+  }
+  layer.innerHTML = wall.pieces.map(pieceHTML).join("");
+  layer.querySelectorAll(".piece").forEach((node) => wireImage(node, wall));
+}
+
+function wireImage(node, wall) {
+  const img = node.querySelector("img");
+  const p = wall.pieces.find((x) => x.id === node.dataset.id);
+  if (!img || !p) return;
+  img.addEventListener("load", () => {
+    const ar = img.naturalWidth / img.naturalHeight;
+    if (ar && Math.abs(ar - p.ar) / p.ar > 0.015) {
+      p.ar = ar;
+      if (mode === "edit") { render(); scheduleSave(); } else { renderShowCurrent(); }
+    }
+  }, { once: true });
+  img.addEventListener("error", () => recoverImage(p, img, wall), { once: true });
+}
+
+const recovering = new Set();
+async function recoverImage(p, img, wall) {
+  if (!p.q || recovering.has(p.id)) return markMissing(img);
+  recovering.add(p.id);
+  try {
+    const res = await searchCommons(p.q);
+    if (res[0]) {
+      Object.assign(p, { src: res[0].src, thumb: res[0].thumb, ar: res[0].ar, q: "" });
+      if (mode === "edit") { render(); scheduleSave(); } else renderShowCurrent();
+      return;
+    }
+  } catch {}
+  markMissing(img);
+}
+function markMissing(img) {
+  const s = img.closest(".sight");
+  if (s && !s.querySelector(".missing")) s.insertAdjacentHTML("beforeend", `<div class="missing">Image unavailable</div>`);
+}
+
+function fitStage() {
+  const r = el.wrap.getBoundingClientRect();
+  const cs = getComputedStyle(el.wrap);
+  const aw = r.width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const ah = r.height - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - (mode === "edit" ? 14 : 0);
+  const w = Math.max(200, Math.min(aw, ah * 16 / 9));
+  el.stage.style.width = w + "px";
+  el.stage.style.height = (w * 9 / 16) + "px";
+  u = w / W;
+}
+
+function render() {
+  document.body.classList.toggle("editing", mode === "edit");
+  document.body.classList.toggle("showing", mode === "show");
+  document.body.classList.toggle("tv", TV);
+  fitStage();
+  el.stage.style.filter = `brightness(${gallery.settings.brightness})`;
+  if (mode === "edit") {
+    front = el.A; back = el.B;
+    el.A.style.opacity = 1; el.B.style.opacity = 0; el.B.innerHTML = "";
+    renderWallInto(el.A, curWall());
+    renderTabs();
+    renderInspector();
+  } else {
+    renderShowCurrent();
+  }
+}
+function renderShowCurrent() {
+  renderWallInto(front, curWall());
+  front.style.opacity = 1; back.style.opacity = 0;
+}
+
+function renderTabs() {
+  el.tabs.innerHTML = gallery.walls.map((w, i) =>
+    `<button class="tab" role="tab" aria-selected="${i === wallIndex}" data-wall="${i}">${esc(w.name)}</button>`).join("")
+    + `<button class="tab add" id="btnAddWall" aria-label="Add a wall">+ Wall</button>`;
+}
+
+/* ============================================================
+   Inspector
+   ============================================================ */
+const ins = { box: $("#inspector"), title: $("#insTitle"), seg: $("#frameSeg"), size: $("#sizeRange"), mat: $("#matRange"), label: $("#labelCheck") };
+ins.seg.innerHTML = Object.entries(FRAMES).map(([k, f]) =>
+  `<button data-frame="${k}" aria-pressed="false"><span class="swatch" style="background:${f.swatch}"></span>${f.name}</button>`).join("");
+
+function renderInspector() {
+  const p = selectedId && findPiece(selectedId);
+  ins.box.hidden = !p || mode !== "edit";
+  if (!p) return;
+  ins.title.innerHTML = `${esc(p.title)}<span>${esc(p.artist)}${p.date ? ", " + esc(p.date) : ""}</span>`;
+  ins.seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.frame === p.frame)));
+  ins.size.value = p.w; ins.mat.value = p.mat; ins.label.checked = p.label;
+}
+ins.seg.addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-frame]"); const p = findPiece(selectedId);
+  if (!b || !p) return;
+  p.frame = b.dataset.frame; render(); scheduleSave();
+});
+ins.size.addEventListener("input", () => { const p = findPiece(selectedId); if (!p) return; p.w = +ins.size.value; render(); scheduleSave(); });
+ins.mat.addEventListener("input", () => { const p = findPiece(selectedId); if (!p) return; p.mat = +ins.mat.value; render(); scheduleSave(); });
+ins.label.addEventListener("change", () => { const p = findPiece(selectedId); if (!p) return; p.label = ins.label.checked; render(); scheduleSave(); });
+$("#btnFront").addEventListener("click", () => {
+  const ps = curWall().pieces; const i = ps.findIndex((p) => p.id === selectedId);
+  if (i >= 0) { ps.push(ps.splice(i, 1)[0]); render(); scheduleSave(); }
+});
+$("#btnRemove").addEventListener("click", () => {
+  const ps = curWall().pieces; const i = ps.findIndex((p) => p.id === selectedId);
+  if (i >= 0) { const [p] = ps.splice(i, 1); selectedId = null; render(); scheduleSave(); toast(`Removed ${p.title}`); }
+});
+$("#insClose").addEventListener("click", () => { selectedId = null; render(); });
+
+/* ============================================================
+   Dragging, resizing, snapping
+   ============================================================ */
+let drag = null;
+el.stage.addEventListener("pointerdown", (e) => {
+  if (mode !== "edit") return;
+  const node = e.target.closest(".piece");
+  if (!node) { if (selectedId) { selectedId = null; render(); } return; }
+  const p = findPiece(node.dataset.id); if (!p) return;
+  e.preventDefault();
+  if (selectedId !== p.id) { selectedId = p.id; el.A.querySelectorAll(".piece").forEach((n) => n.classList.toggle("sel", n === node)); renderInspector(); }
+  const rect = el.stage.getBoundingClientRect();
+  const resize = !!e.target.closest("[data-handle]");
+  drag = { id: p.id, node, resize, sx: e.clientX, sy: e.clientY, x0: p.x, y0: p.y, w0: p.w, rect,
+    dist0: Math.hypot(e.clientX - (rect.left + p.x * u), e.clientY - (rect.top + p.y * u)) || 1, moved: false };
+  try { el.stage.setPointerCapture(e.pointerId); } catch {}
+  node.classList.add("dragging");
+});
+el.stage.addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  const p = findPiece(drag.id); if (!p) return;
+  drag.moved = true;
+  if (drag.resize) {
+    const d = Math.hypot(e.clientX - (drag.rect.left + p.x * u), e.clientY - (drag.rect.top + p.y * u));
+    p.w = clamp(drag.w0 * d / drag.dist0, 30, 960);
+    drag.node.outerHTML = pieceHTML(p);
+    drag.node = el.A.querySelector(`[data-id="${p.id}"]`);
+    wireImage(drag.node, curWall());
+    ins.size.value = p.w;
+    return;
+  }
+  let x = drag.x0 + (e.clientX - drag.sx) / u;
+  let y = drag.y0 + (e.clientY - drag.sy) / u;
+  const snap = 7, guides = [];
+  if (Math.abs(x - W / 2) < snap) { x = W / 2; guides.push(["v", W / 2]); }
+  if (Math.abs(y - H / 2) < snap) { y = H / 2; guides.push(["h", H / 2]); }
+  for (const o of curWall().pieces) {
+    if (o.id === p.id) continue;
+    if (Math.abs(y - o.y) < snap) { y = o.y; guides.push(["h", o.y]); }
+    if (Math.abs(x - o.x) < snap) { x = o.x; guides.push(["v", o.x]); }
+  }
+  p.x = clamp(x, 0, W); p.y = clamp(y, 0, H);
+  const d = dims(p);
+  drag.node.style.left = ((p.x - d.ow / 2) * u) + "px";
+  drag.node.style.top = ((p.y - d.oh / 2) * u) + "px";
+  el.guides.innerHTML = guides.map(([t, v]) => t === "v"
+    ? `<div class="guide v" style="left:${v * u}px"></div>` : `<div class="guide h" style="top:${v * u}px"></div>`).join("");
+});
+function endDrag() {
+  if (!drag) return;
+  const moved = drag.moved;
+  drag.node?.classList.remove("dragging");
+  drag = null; el.guides.innerHTML = "";
+  if (moved) { render(); scheduleSave(); }
+}
+el.stage.addEventListener("pointerup", endDrag);
+el.stage.addEventListener("pointercancel", endDrag);
+
+/* ============================================================
+   Walls, toolbar
+   ============================================================ */
+el.tabs.addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.id === "btnAddWall") {
+    gallery.walls.push({ id: uid(), name: `Wall ${gallery.walls.length + 1}`, pieces: [] });
+    wallIndex = gallery.walls.length - 1; selectedId = null; render(); scheduleSave(); return;
+  }
+  wallIndex = +b.dataset.wall; selectedId = null; render();
+});
+$("#btnHang").addEventListener("click", () => { hangEvenly(curWall()); render(); scheduleSave(); toast("Rehung on a common centre line"); });
+$("#btnShow").addEventListener("click", () => enterShow());
+$("#exitShow").addEventListener("click", () => leaveShow());
+
+function enterShow() {
+  mode = "show"; selectedId = null;
+  try { document.documentElement.requestFullscreen?.().catch(() => {}); } catch {}
+  requestWake();
+  render(); startRotation();
+}
+function leaveShow() {
+  if (TV) return;
+  mode = "edit";
+  try { if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); } catch {}
+  stopRotation(); $("#exitShow").classList.remove("visible");
+  render();
+}
+let exitTimer = 0;
+document.addEventListener("pointerdown", (e) => {
+  if (mode !== "show" || TV || e.target.id === "exitShow") return;
+  const b = $("#exitShow"); b.classList.add("visible");
+  clearTimeout(exitTimer); exitTimer = setTimeout(() => b.classList.remove("visible"), 3500);
+});
+
+function startRotation() {
+  stopRotation();
+  const s = +gallery.settings.rotate;
+  if (s > 0 && gallery.walls.length > 1) rotateTimer = setInterval(() => goWall(1), s * 1000);
+}
+function stopRotation() { clearInterval(rotateTimer); rotateTimer = 0; }
+function goWall(step) {
+  const n = gallery.walls.length; if (n < 2) return;
+  wallIndex = (wallIndex + step + n) % n;
+  renderWallInto(back, curWall());
+  back.style.opacity = 1; front.style.opacity = 0;
+  [front, back] = [back, front];
+}
+
+let wakeLock = null;
+async function requestWake() { try { wakeLock = await navigator.wakeLock?.request("screen"); } catch {} }
+document.addEventListener("visibilitychange", () => { if (mode === "show" && document.visibilityState === "visible") requestWake(); });
+
+document.addEventListener("keydown", (e) => {
+  const typing = /INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName || "");
+  if (mode === "show") {
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") { goWall(1); startRotation(); e.preventDefault(); }
+    else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { goWall(-1); startRotation(); e.preventDefault(); }
+    else if ((e.key === "e" || e.key === "Escape") && !TV) leaveShow();
+    return;
+  }
+  if (e.key === "Escape") {
+    if (!scrim.hidden) closePanels();
+    else if (selectedId) { selectedId = null; render(); }
+    return;
+  }
+  if (typing) return;
+  const p = selectedId && findPiece(selectedId); if (!p) return;
+  const step = e.shiftKey ? 10 : 2;
+  const moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+  if (moves[e.key]) { p.x = clamp(p.x + moves[e.key][0], 0, W); p.y = clamp(p.y + moves[e.key][1], 0, H); render(); scheduleSave(); e.preventDefault(); }
+  if (e.key === "Delete" || e.key === "Backspace") { $("#btnRemove").click(); e.preventDefault(); }
+});
+window.addEventListener("resize", () => render());
+
+/* ============================================================
+   Panels
+   ============================================================ */
+const scrim = $("#scrim");
+function openPanel(id) { closePanels(); $(id).hidden = false; scrim.hidden = false; }
+function closePanels() { document.querySelectorAll(".panel").forEach((p) => (p.hidden = true)); scrim.hidden = true; }
+scrim.addEventListener("click", closePanels);
+document.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closePanels));
+
+/* ---------- Search ---------- */
+let source = "commons";
+const results = $("#results"), note = $("#searchNote");
+function renderChips() {
+  $("#chips").innerHTML = SOURCES[source].chips.map((c) => `<button class="chip" type="button">${esc(c)}</button>`).join("");
+}
+$("#sourceSeg").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  source = b.dataset.src;
+  $("#sourceSeg").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  renderChips();
+  if ($("#searchInput").value.trim()) runSearch();
+});
+$("#chips").addEventListener("click", (e) => { const b = e.target.closest(".chip"); if (!b) return; $("#searchInput").value = b.textContent; runSearch(); });
+$("#searchForm").addEventListener("submit", (e) => { e.preventDefault(); runSearch(); });
+$("#btnAdd").addEventListener("click", () => {
+  openPanel("#addPanel");
+  if (!results.children.length) { $("#searchInput").value = source === "aic" ? "Turner" : "J. M. W. Turner"; runSearch(); }
+  setTimeout(() => $("#searchInput").focus(), 50);
+});
+
+let lastResults = [], searchSeq = 0;
+async function runSearch() {
+  const q = $("#searchInput").value.trim(); if (!q) return;
+  const seq = ++searchSeq;
+  note.textContent = "Searching…"; results.innerHTML = "";
+  try {
+    const list = source === "aic" ? await searchAIC(q) : await searchCommons(q);
+    if (seq !== searchSeq) return;
+    lastResults = list;
+    note.textContent = list.length ? `${list.length} works. Tap one to hang it on “${curWall().name}”.` : "No paintings found. Try the artist's surname with a place or subject.";
+    results.innerHTML = list.map((r, i) => `<button class="result" data-i="${i}" type="button">
+      <div class="thumb" style="background-image:url('${esc(r.thumb)}')"></div>
+      <div class="t">${esc(r.title)}</div><div class="a">${esc(r.artist)}${r.date ? " · " + esc(r.date) : ""}</div></button>`).join("");
+  } catch (err) {
+    if (seq !== searchSeq) return;
+    note.textContent = "The collection didn't respond. Check the connection and search again.";
+  }
+}
+results.addEventListener("click", (e) => {
+  const b = e.target.closest(".result"); if (!b) return;
+  const r = lastResults[+b.dataset.i]; if (!r) return;
+  addPiece(r); b.classList.add("added");
+});
+function addPiece(r) {
+  const wall = curWall();
+  const h = 210;
+  const p = { id: uid(), src: r.src, thumb: r.thumb, q: "", title: r.title, artist: r.artist, date: r.date, credit: r.credit,
+    ar: r.ar || 1.33, w: h * (r.ar || 1.33), x: W / 2 + (Math.random() - .5) * 60, y: H / 2 + (Math.random() - .5) * 40,
+    frame: /watercolou?r|drawing|sketch|paper|gouache/i.test(r.medium || r.title) ? "walnut" : "gilt",
+    mat: /watercolou?r|drawing|sketch|paper|gouache/i.test(r.medium || r.title) ? 0.12 : 0, label: true };
+  wall.pieces.push(p); selectedId = p.id;
+  render(); scheduleSave();
+  toast(`Hung on “${wall.name}”`);
+}
+
+function stripHtml(s) {
+  const d = document.createElement("div"); d.innerHTML = s || ""; return (d.textContent || "").replace(/\s+/g, " ").trim();
+}
+async function searchCommons(q) {
+  const p = new URLSearchParams({
+    action: "query", format: "json", origin: "*", generator: "search", gsrsearch: `${q} filetype:bitmap`,
+    gsrnamespace: "6", gsrlimit: "40", prop: "imageinfo", iiprop: "url|size|extmetadata", iiurlwidth: "1920",
+    iiextmetadatafilter: "ObjectName|Artist|DateTimeOriginal|Credit|LicenseShortName|ImageDescription"
+  });
+  const r = await fetch(`https://commons.wikimedia.org/w/api.php?${p}`);
+  if (!r.ok) throw new Error(r.status);
+  const j = await r.json();
+  const pages = Object.values(j.query?.pages || {}).sort((a, b) => a.index - b.index);
+  return pages.map((pg) => {
+    const ii = pg.imageinfo?.[0]; if (!ii) return null;
+    const m = ii.extmetadata || {};
+    const ar = ii.width / ii.height;
+    if (ii.width < 800 || ar < 0.3 || ar > 3.2) return null;
+    const src = ii.thumburl || ii.url;
+    const fileTitle = pg.title.replace(/^File:/, "").replace(/\.[a-z0-9]+$/i, "").replace(/_/g, " ");
+    let title = stripHtml(m.ObjectName?.value) || fileTitle;
+    if (title.length > 120) title = title.slice(0, 117) + "…";
+    let artist = stripHtml(m.Artist?.value).replace(/\s*\(.*$/, "");
+    if (artist.length > 60) artist = artist.slice(0, 57) + "…";
+    let date = stripHtml(m.DateTimeOriginal?.value);
+    if (date.length > 24) date = (date.match(/\b1[0-9]{3}\b/) || [""])[0];
+    const lic = stripHtml(m.LicenseShortName?.value);
+    return { src, thumb: src.replace(/\/1920px-/, "/330px-"), ar, title, artist, date,
+      credit: `Wikimedia Commons${lic ? ", " + lic.toLowerCase() : ""}`, medium: stripHtml(m.ImageDescription?.value).slice(0, 200) };
+  }).filter(Boolean);
+}
+async function searchAIC(q) {
+  const fields = "id,title,artist_title,date_display,image_id,thumbnail,medium_display,credit_line";
+  const url = `https://api.artic.edu/api/v1/artworks/search?q=${encodeURIComponent(q)}&query%5Bterm%5D%5Bis_public_domain%5D=true&limit=40&fields=${fields}`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(r.status);
+  const j = await r.json();
+  const iiif = j.config?.iiif_url || "https://www.artic.edu/iiif/2";
+  return (j.data || []).filter((d) => d.image_id && d.thumbnail?.width).map((d) => ({
+    src: `${iiif}/${d.image_id}/full/1686,/0/default.jpg`, thumb: `${iiif}/${d.image_id}/full/400,/0/default.jpg`,
+    ar: d.thumbnail.width / d.thumbnail.height, title: d.title || "Untitled", artist: d.artist_title || "",
+    date: d.date_display || "", credit: "Art Institute of Chicago", medium: d.medium_display || ""
+  }));
+}
+
+/* ---------- Settings ---------- */
+$("#btnSettings").addEventListener("click", () => { fillSettings(); openPanel("#settingsPanel"); });
+function fillSettings() {
+  const s = gallery.settings;
+  $("#wallName").value = curWall().name;
+  $("#rotateSel").value = String(s.rotate);
+  $("#brightRange").value = s.brightness;
+  $("#lampsCheck").checked = s.lamps;
+  $("#labelsCheck").checked = s.labels;
+  $("#editKey").value = lsGet(LS_EDITKEY) || "";
+  $("#deleteConfirm").hidden = true; $("#resetConfirm").hidden = true; $("#copyBox").hidden = true;
+  $("#btnDeleteWall").disabled = gallery.walls.length < 2;
+  const sn = $("#syncNote");
+  if (cloud === "ready") {
+    sn.textContent = cloudEditable
+      ? "Connected. With the edit key saved on this phone or laptop, every change goes straight to the projector within a minute."
+      : "Connected, but saving is switched off. Add an EDIT_KEY environment variable in Vercel and redeploy.";
+    $("#keyRow").hidden = !cloudEditable;
+  } else if (cloud === "nostore") {
+    sn.textContent = "The site is live, but no database is connected yet. In Vercel, add Upstash Redis under Storage and redeploy. Until then, changes stay on this device.";
+    $("#keyRow").hidden = true;
+  } else {
+    sn.textContent = "No sync server here. Changes stay on this device. To move a layout to the projector, copy the layout link and open it there.";
+    $("#keyRow").hidden = true;
+  }
+}
+$("#wallName").addEventListener("input", (e) => { curWall().name = e.target.value || "Untitled wall"; renderTabs(); scheduleSave(); });
+$("#rotateSel").addEventListener("change", (e) => { gallery.settings.rotate = +e.target.value; scheduleSave(); });
+$("#brightRange").addEventListener("input", (e) => { gallery.settings.brightness = +e.target.value; render(); scheduleSave(); });
+$("#lampsCheck").addEventListener("change", (e) => { gallery.settings.lamps = e.target.checked; render(); scheduleSave(); });
+$("#labelsCheck").addEventListener("change", (e) => { gallery.settings.labels = e.target.checked; render(); scheduleSave(); });
+$("#btnDeleteWall").addEventListener("click", () => { $("#deleteConfirm").hidden = false; });
+$("#btnDeleteNo").addEventListener("click", () => { $("#deleteConfirm").hidden = true; });
+$("#btnDeleteYes").addEventListener("click", () => {
+  if (gallery.walls.length < 2) return;
+  gallery.walls.splice(wallIndex, 1); wallIndex = Math.max(0, wallIndex - 1); selectedId = null;
+  closePanels(); render(); scheduleSave();
+});
+$("#btnReset").addEventListener("click", () => { $("#resetConfirm").hidden = false; });
+$("#btnResetNo").addEventListener("click", () => { $("#resetConfirm").hidden = true; });
+$("#btnResetYes").addEventListener("click", () => {
+  gallery = sampleGallery(); wallIndex = 0; selectedId = null; closePanels(); render(); scheduleSave(); toast("Sample walls restored");
+});
+$("#btnSaveKey").addEventListener("click", async () => {
+  const k = $("#editKey").value.trim();
+  lsSet(LS_EDITKEY, k);
+  const ok = await pushCloud(true);
+  toast(ok ? "Key saved. The projector now follows this gallery." : "That key was refused. Check EDIT_KEY in Vercel.");
+});
+$("#btnCopyTv").addEventListener("click", () => copyText(`${location.origin}${location.pathname}?show=1`, "Projector address copied"));
+$("#btnCopyLink").addEventListener("click", async () => {
+  const code = await encodeGallery(gallery);
+  copyText(`${location.origin}${location.pathname}#g=${code}`, "Layout link copied");
+});
+async function copyText(text, msg) {
+  const box = $("#copyBox"); box.value = text; box.hidden = false;
+  try { await navigator.clipboard.writeText(text); toast(msg); }
+  catch { box.focus(); box.select(); toast("Select the address below and copy it"); }
+}
+
+let toastTimer = 0;
+function toast(msg) {
+  let t = $(".toast"); if (!t) { t = document.createElement("div"); t.className = "toast"; t.setAttribute("role", "status"); document.body.appendChild(t); }
+  t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), 2400);
+}
+
+/* ============================================================
+   Saving & sync
+   ============================================================ */
+function setStatus(text, warn) { el.status.textContent = text; el.status.classList.toggle("warn", !!warn); }
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    lsSet(LS_KEY, JSON.stringify(gallery));
+    if (cloud === "ready" && cloudEditable && lsGet(LS_EDITKEY)) await pushCloud(false);
+    else refreshStatus();
+  }, 900);
+}
+function refreshStatus() {
+  if (cloud === "ready" && cloudEditable && lsGet(LS_EDITKEY)) setStatus("Synced with the projector");
+  else if (cloud === "ready" && cloudEditable) setStatus("Saved on this device. Add the edit key in Settings to update the projector.", true);
+  else setStatus("Saved on this device");
+}
+async function pushCloud(force) {
+  const key = lsGet(LS_EDITKEY); if (!key || cloud !== "ready") { refreshStatus(); return false; }
+  try {
+    const body = JSON.stringify(gallery);
+    const r = await fetch("api/gallery", { method: "PUT", headers: { "content-type": "application/json", "x-edit-key": key }, body });
+    if (r.ok) { lastCloudJson = body; setStatus("Synced with the projector"); return true; }
+    setStatus(r.status === 403 ? "The edit key was refused. Check it in Settings." : "Couldn't reach the sync server. Changes are saved on this device.", true);
+  } catch { setStatus("Offline. Changes are saved on this device.", true); }
+  return false;
+}
+async function fetchCloud() {
+  try {
+    const r = await fetch("api/gallery", { cache: "no-store" });
+    const type = r.headers.get("content-type") || "";
+    if (r.status === 501) { cloud = "nostore"; return null; }
+    if (!r.ok || !type.includes("json")) { cloud = "none"; return null; }
+    const j = await r.json();
+    cloud = "ready"; cloudEditable = !!j.editable;
+    return j.gallery ? normalise(j.gallery) : null;
+  } catch { cloud = "none"; return null; }
+}
+function startPolling() {
+  clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    if (mode !== "show" || cloud !== "ready") return;
+    try {
+      const r = await fetch("api/gallery", { cache: "no-store" });
+      if (!r.ok) return;
+      const j = await r.json();
+      const txt = JSON.stringify(j.gallery);
+      if (j.gallery && txt !== lastCloudJson) {
+        lastCloudJson = txt;
+        gallery = normalise(j.gallery);
+        wallIndex = Math.min(wallIndex, gallery.walls.length - 1);
+        el.stage.style.filter = `brightness(${gallery.settings.brightness})`;
+        renderShowCurrent(); startRotation();
+      }
+    } catch {}
+  }, 60000);
+}
+
+/* layout links: deflate + base64url in the hash */
+async function encodeGallery(g) {
+  const bytes = new TextEncoder().encode(JSON.stringify(g));
+  let out = bytes;
+  if (window.CompressionStream) {
+    const cs = new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+    out = new Uint8Array(await new Response(cs).arrayBuffer());
+  }
+  let s = ""; out.forEach((b) => (s += String.fromCharCode(b)));
+  return (window.CompressionStream ? "z" : "j") + btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+async function decodeGallery(code) {
+  const kind = code[0];
+  const b64 = code.slice(1).replace(/-/g, "+").replace(/_/g, "/");
+  const bin = atob(b64); const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  let text;
+  if (kind === "z") {
+    const ds = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    text = await new Response(ds).text();
+  } else text = new TextDecoder().decode(bytes);
+  return normalise(JSON.parse(text));
+}
+
+/* ============================================================
+   Boot
+   ============================================================ */
+(async function boot() {
+  let fromLink = null;
+  if (hashParams.get("g")) { try { fromLink = await decodeGallery(hashParams.get("g")); } catch {} }
+  const fromCloud = await fetchCloud();
+  let fromLocal = null;
+  try { fromLocal = normalise(JSON.parse(lsGet(LS_KEY) || "null")); } catch {}
+  gallery = fromLink || fromCloud || fromLocal || sampleGallery();
+  if (fromCloud && gallery === fromCloud) lastCloudJson = JSON.stringify(fromCloud);
+  if (fromLink) { lsSet(LS_KEY, JSON.stringify(gallery)); history.replaceState(null, "", location.pathname + location.search); toast("Layout loaded from link"); }
+  refreshStatus();
+  render();
+  if (mode === "show") { requestWake(); startRotation(); }
+  startPolling();
+  if (document.fonts?.ready) document.fonts.ready.then(() => render());
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "name": "turner-room",
+  "private": true,
+  "description": "A night gallery of framed public-domain paintings for a projector wall.",
+  "engines": { "node": ">=18" }
+}

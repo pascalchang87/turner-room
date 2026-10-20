@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Turner Room</string>
+    <string name="settings_title">Turner Room address</string>
+</resources>

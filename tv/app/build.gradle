@@ -1,0 +1,50 @@
+plugins {
+    id "com.android.application"
+}
+
+// The gallery address can be baked in at build time:
+//   gradle assembleRelease -PgalleryUrl=https://your-site.vercel.app/?show=1
+// Otherwise the app asks for it on first launch.
+def galleryUrl = (project.findProperty("galleryUrl") ?: "").toString().replace('"', '')
+
+android {
+    namespace "app.turnerroom.tv"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "app.turnerroom.tv"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+        buildConfigField "String", "GALLERY_URL", "\"${galleryUrl}\""
+    }
+
+    buildFeatures { buildConfig true }
+
+    signingConfigs {
+        // A fixed key checked into the repo, so new builds install over old ones.
+        // It's only meant for sideloading onto your own projector.
+        home {
+            storeFile file("home.keystore")
+            storePassword "turnerroom"
+            keyAlias "turnerroom"
+            keyPassword "turnerroom"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.home
+        }
+        debug {
+            signingConfig signingConfigs.home
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
